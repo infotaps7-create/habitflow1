@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function() {
+        // Intercept Vite HMR WebSocket to completely prevent failed connection in preview iframe
+        if (typeof window !== 'undefined' && window.WebSocket) {
+          var NativeWebSocket = window.WebSocket;
+          window.WebSocket = function(url, protocols) {
+            var isViteHmr =
+              (Array.isArray(protocols) ? protocols.indexOf('vite-hmr') !== -1 : protocols === 'vite-hmr') ||
+              (typeof url === 'string' && (url.indexOf('vite-hmr') !== -1 || url.indexOf('token=') !== -1));
+
+            if (isViteHmr) {
+              var listeners = {};
+              var dummyWs = {
+                binaryType: 'blob',
+                bufferedAmount: 0,
+                extensions: '',
+                protocol: 'vite-hmr',
+                readyState: 1, // WebSocket.OPEN
+                url: String(url),
+                send: function() {},
+                close: function() {
+                  dummyWs.readyState = 3; // CLOSED
+                  if (typeof dummyWs.onclose === 'function') {
+                    try { dummyWs.onclose({ type: 'close', wasClean: true, code: 1000 }); } catch (e) {}
+                  }
+                },
+                addEventListener: function(type, listener) {
+                  if (!listeners[type]) listeners[type] = [];
+                  listeners[type].push(listener);
+                  if (type === 'open') {
+                    setTimeout(function() {
+                      try { listener({ type: 'open' }); } catch (e) {}
+                    }, 0);
+                  }
+                },
+                removeEventListener: function(type, listener) {
+                  if (!listeners[type]) return;
+                  listeners[type] = listeners[type].filter(function(l) { return l !== listener; });
+                },
+                dispatchEvent: function() { return true; },
+                onopen: null,
+                onclose: null,
+                onerror: null,
+                onmessage: null,
+              };
+
+              setTimeout(function() {
+                if (typeof dummyWs.onopen === 'function') {
+                  try { dummyWs.onopen({ type: 'open' }); } catch (e) {}
+                }
+              }, 0);
+
+              return dummyWs;
+            }
+
+            return new NativeWebSocket(url, protocols);
+          };
+          window.WebSocket.prototype = NativeWebSocket.prototype;
+          window.WebSocket.CONNECTING = 0;
+          window.WebSocket.OPEN = 1;
+          window.WebSocket.CLOSING = 2;
+          window.WebSocket.CLOSED = 3;
+        }
+
+        // Suppress Vite HMR WebSocket connection errors in iframe / preview environments
+        function isWsError(msg) {
+          if (!msg) return false;
+          var str = typeof msg === 'string' ? msg : (msg.message || msg.reason || String(msg));
+          return /websocket|vite|ws:\/\//i.test(str) && /closed|failed|cannot|error/i.test(str);
+        }
+
+        window.addEventListener('unhandledrejection', function(event) {
+          if (isWsError(event.reason)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          }
+        }, true);
+
+        window.addEventListener('error', function(event) {
+          if (isWsError(event.message) || isWsError(event.error)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          }
+        }, true);
+
+        var origWarn = console.warn;
+        console.warn = function() {
+          var args = Array.prototype.slice.call(arguments);
+          if (args.some(function(arg) { return isWsError(arg); })) {
+            return;
+          }
+          origWarn.apply(console, args);
+        };
+
+        var origError = console.error;
+        console.error = function() {
+          var args = Array.prototype.slice.call(arguments);
+          if (args.some(function(arg) { return isWsError(arg); })) {
+            return;
+          }
+          origError.apply(console, args);
+        };
+
+        // Remove vite-error-overlay if it ever reports a websocket error
+        var observer = new MutationObserver(function(mutations) {
+          for (var i = 0; i < mutations.length; i++) {
+            var added = mutations[i].addedNodes;
+            for (var j = 0; j < added.length; j++) {
+              var node = added[j];
+              if (node.nodeName === 'VITE-ERROR-OVERLAY') {
+                var content = (node.shadowRoot && node.shadowRoot.textContent) || node.textContent || '';
+                if (isWsError(content)) {
+                  node.remove();
+                }
+              }
+            }
+          }
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+      })();
+    </script>
+    <title>HabitFlow - Habit Tracking &amp; LifeOS</title>
+    <meta name="description" content="Flow into better habits, track daily routines, optimize wealth, and stay consistent with HabitFlow." />
+    <meta property="og:title" content="HabitFlow - Habit Tracking &amp; LifeOS" />
+    <meta property="og:description" content="Flow into better habits, track daily routines, optimize wealth, and stay consistent with HabitFlow." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  </head>
+  <body class="bg-slate-50 text-slate-900 antialiased font-sans selection:bg-emerald-500/20 selection:text-emerald-800">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
